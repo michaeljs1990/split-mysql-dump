@@ -10,7 +10,6 @@ import (
 	"bufio"
 	"bytes"
 	"os"
-	"regexp"
 	"strings"
 )
 
@@ -45,15 +44,6 @@ func openFile(file string) *os.File {
 	}
 
 	return f
-}
-
-// This returns all the regexes we need
-func compileRegex() *regexp.Regexp {
-	var regexSlice *regexp.Regexp
-
-	regexSlice = regexp.MustCompile("^-- Table structure for table .(.+).")
-
-	return regexSlice
 }
 
 // bufio.ReadLine does not gurantee that
@@ -94,10 +84,9 @@ func getTableName(name []byte) string {
 // findTables parses the passed in file
 func findTables(file *os.File) *ParsedFiles {
 	var tableFile *os.File
+	var buffer bytes.Buffer
 	createdFiles := NewParsedFiles()
 	inTable := false
-
-	regexSlice := compileRegex()
 
 	reader := bufio.NewReader(file)
 	// Buffered makes sure we have more bytes
@@ -105,17 +94,21 @@ func findTables(file *os.File) *ParsedFiles {
 	for _, err := reader.Peek(1); err == nil; {
 		line := getFullLine(reader)
 
-		if x := regexSlice.Find(line); x != nil {
+		if contains := bytes.Contains(line, []byte("-- Table structure for table")); contains {
 			if inTable {
 				tableFile.Close()
 			}
-			tableName := getTableName(x)
+			tableName := getTableName(line)
 			createdFiles.Files = append(createdFiles.Files, tableName)
 			tableFile = makeNewFile(tableName)
 			inTable = true
 		}
 
-		tableFile.Write(append(line, []byte("\n")...))
+		buffer.Write(line)
+		buffer.Write([]byte("\n"))
+
+		tableFile.Write(buffer.Bytes())
+		buffer.Reset()
 
 		_, err = reader.Peek(1)
 	}
